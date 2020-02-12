@@ -94,6 +94,8 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 	Hash hash = Hash::Parse(tx.payload);
 	const Byte* payload = hash.ToByteArray();
 
+	//todo - validate that the payload contains the TxHash of the transaction that sent the pack-nft to the store
+
 	if( 0!=memcmp(ram_txSeed, payload, Hash::Length) )
 		return Mismatch;
 
