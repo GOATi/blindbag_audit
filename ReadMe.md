@@ -14,7 +14,7 @@ We are not aware of **any** games that currently implement item number 2.
 
 The types of items that are possibly found within the 22RS "blind bag", and the chances of finding each item are made public. For example: <https://22series.com/part_info?part=33554433>
 
-Also, the random number generation itself is designed to be completely fair and auditable. Neither the player, nor the game should be able to influence the roll of the dice. This has the side effect that even we do not know for sure what is inside each "bag" until it is opened by the user.
+We have altered our random number generation to now be **user auditable**. Neither the player, nor the game should be able to influence the roll of the dice. This has the side effect that even we do not know for sure what is inside each "bag" until it is opened by the user.
 
 This repository contains the code to perform an audit of the random number generation.
 
@@ -73,7 +73,7 @@ http://www.22series.com/api/store/part_info?id=33554433&depth=0
 
 ## Random number generation
 
-A 64bit Xorshift algorithm is used for simplicity of implementation. The most important detail is how the 64bit seed is calculated.
+A 64bit Xorshift algorithm is used for simplicity of implementation*. The most important detail is how the 64bit seed is calculated.
 
 Upon creation, each individual "blind bag" item is assigned several immutable properties, publicly viewable on the Phantasma blockchain.
 
@@ -88,23 +88,27 @@ If the secret seed alone was used to seed the random number generator, then the 
 
 To avoid giving the user complete control over their choice of seed, which would make user-attacks easier to perform, the hash of their phantasma transaction that sent their "blind bag" to the 22RS game for opening is used as their 256bit seed.
 
-To combine these seed values, the FNV-64a hash function is used, again for simplicity of implementation.
+To combine these seed values, the FNV-64a hash function is used, again for simplicity of implementation*.
 
 1. Instead of the standard FNV-64 offset basis of 0xcbf29ce484222325, the 192bit secret seed is first hashed using the 64bit public seed as the offset basis.
 2. The result of this first operation is used as the offset basis when hashing the user-provided 256-bit seed.
 3. The result of the second operation is used as the seed for the Xorshift algorithm.
 
+This algorithm is used as a proof of concept, and should be replaced with a CSPRNG in the future to remove all possibility of cheating. See the Future Work section below for a roadmap of improvement.
+
+[^*]: Currently these algorithms run on a C++ server, but we may want to port them to the PhantasmaVM, where simpler code is much cheaper to execute in terms of KCAL tokens. Also, these simple algorithms are currently in use simply because they are what we were using before we decided to make this system auditable! 
+
 ## Implementation
 
-[hash.h]() - FNV64a implementation
+[hash.h](hash.h) - FNV64a implementation
 
-[random.h]() - Xorshift64M implementation
+[random.h](random.h) - Xorshift64M implementation
 
-[goati_nft.h]() - Decoding of Phantasma NFT ROM and RAM data
+[goati_nft.h](goati_nft.h) - Decoding of Phantasma NFT ROM and RAM data
 
-[Audit.h]() - Implementation of the "rolls" and "groups" blind-bag opening algorithm, along with auditing code to compare against the values published to the blockchain.
+[Audit.h](Audit.h) - Implementation of the "rolls" and "groups" blind-bag opening algorithm, along with auditing code to compare against the values published to the blockchain.
 
-[main.cpp]() - Command line tool to audit a particular blockchain transaction.
+[main.cpp](main.cpp) - Command line tool to audit a particular blockchain transaction.
 
 ## Dependencies
 
@@ -112,6 +116,12 @@ Included in this repository: C++ Phantasma SDK, libcurl, libsodium
 
 ## Future work
 
-Neither the Xorshift64M or the FNV64a algorithms have any cryptographic properties, and may be able to be attacked by a determined user. Such attacks require the user to be able to precisely alter their phantasma transaction payloads so that the generated double-SHA-256 transaction hash contains the specific values that they require to attack our system. This would be similar in complexity to bitcoin mining, which is hopefully a more profitable activity for these attackers to undertake ;) 
+Neither the Xorshift64M or the FNV64a algorithms have any cryptographic properties, and may be able to be subject to bias, bad distribution properties, or attacks by a determined user. These should be "fair enough" for production use in a game (they are the same algorithms we would traditionally use within game development) but have weaknesses that are out of place in a cryptographic system.
 
-In the future we will migrate to cryptographic hashing algorithms in these sections of the implementation, as necessary.
+User attacks to control the items generated require the user to be able to precisely alter their phantasma transaction payloads so that the generated double-SHA-256 transaction hash contains the specific values that they require to influence the FNV hash. This would be similar in complexity to bitcoin mining, which is hopefully a more profitable activity for these attackers to undertake ;) 
+
+There may also be bias present in these algorithms that causes the "random" numbers to not be quite as uniform as we intend -- causing some items to be given to users more often than others, even though the weights are equal. If such bias is present, it could be exploited by the 22RS game to subtly influence the items discovered by users. This would represent an *unfairness* in the system that undermines our entire mission.
+
+Another auditing tool is in development to perform a statistical analysis of the behaviour of the RNG over a period of time (by looking at all transactions on the blockchain) to identify any bias that is occurring in practice. 
+
+In the future we will migrate to cryptographic hashing and CSPRNG algorithms in these sections of the implementation, to provide full confidence in the fairness of the system.
