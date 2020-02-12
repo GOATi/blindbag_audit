@@ -64,9 +64,12 @@ int main( int argc, char *argv[] )
 	AuditResult result = AuditBoxTx(host, nexus, txHash);
 	switch(result)
 	{
+	case Error:
+		printf("The audit tool cannot handle this situation");
+		return 3;
 	case Unsuitable:
 		printf("Unsuitable transaction");
-		return 1;
+		return 2;
 	case Indeterminate:
 		printf("Unable to validate at this time");
 		return 1;

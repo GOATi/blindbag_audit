@@ -2,6 +2,7 @@
 
 enum AuditResult
 {
+	Error,
 	Unsuitable,
 	Indeterminate,
 	Mismatch,
@@ -21,6 +22,7 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 
 	PHANTASMA_VECTOR<BigInteger> nftIdsMinted;
 	BigInteger nftId;
+	int numBurnt = 0;
 	for(const auto& evt : tx.events)
 	{
 		if(0==evt.kind.compare(PHANTASMA_LITERAL("TokenBurn")))
@@ -29,6 +31,7 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 			if (0!=data.symbol.compare(PHANTASMA_LITERAL("TTRS")))
 				continue;
 			nftId = data.value;
+			++numBurnt;
 		}
 		else if(0==evt.kind.compare(PHANTASMA_LITERAL("TokenMint")))
 		{
@@ -40,6 +43,9 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 	}
 	if( nftId.IsZero() || nftIdsMinted.empty() )
 		return Unsuitable;
+
+	if( numBurnt > 1 )
+		return Error;//TODO - need to handle transactions that opened multiple NFTs at once!
 
 	auto data = api.GetTokenData(PHANTASMA_LITERAL("TTRS"), nftId.ToString().c_str(), &err);
 	if( err.code != 0 )
@@ -58,16 +64,16 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 	if( !GoatiNftRom_DecodeItem(Base16::Decode(data.rom), itemId, mintingSource, sourceData, 
 		season, timestamp, randomSeed, counter, originalOwner,
 		crateSecret, type) )
-		return Indeterminate;
+		return Unsuitable;
 	if( type != GOATiNftType::Crate )
-		return Indeterminate;
+		return Unsuitable;
 	if(crateSecret.size() != CrateSecret::LENGTH)
-		return Indeterminate;
+		return Error;
 
 	ByteArray ram = Base16::Decode(data.ram);
 
 	if( ram.size() < 8*5+Hash::Length)
-		return Indeterminate;
+		return Error;
 
 	uint64_t ram_crateSeed[3] = {};
 	uint64_t ram_randomSeed = 0;
@@ -119,21 +125,21 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 			const auto& groups = json::LookupArray(doc, PHANTASMA_LITERAL("groups"), jsonError);
 			const auto& rolls = json::LookupArray(doc, PHANTASMA_LITERAL("rolls"), jsonError);
 			if( jsonError )
-				return Indeterminate;
+				return Error;
 
 			for(int i=0, end=json::ArraySize( groups, jsonError ); i!=end; ++i)
 			{
 				CrateInfo::ItemGroup groupInfo;
 				auto groupValue = json::IndexArray(groups, i, jsonError);
 				if( !json::IsArray(groupValue, jsonError) || jsonError )
-					return Indeterminate;
+					return Error;
 				auto group = json::AsArray(groupValue, jsonError);
 				for(int j=0, jend=json::ArraySize( group, jsonError ); j!=jend; ++j)
 				{
 					auto item = json::IndexArray(group, j, jsonError);
 					uint32_t id = json::AsUInt32(item, jsonError);
 					if( !id || jsonError )
-						return Indeterminate;
+						return Error;
 					groupInfo.items.push_back(id);
 				}
 				info.groups.push_back(groupInfo);
@@ -144,14 +150,14 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 				CrateInfo::ItemRoll rollInfo;
 				auto rollValue = json::IndexArray(rolls, i, jsonError);
 				if( !json::IsArray(rollValue, jsonError) || jsonError )
-					return Indeterminate;
+					return Error;
 				auto roll = json::AsArray(rollValue, jsonError);
 				for(int j=0, jend=json::ArraySize( roll, jsonError ); j!=jend; ++j)
 				{
 					auto item = json::IndexArray(roll, j, jsonError);
 					uint32_t weight = json::AsUInt32(item, jsonError);
 					if( jsonError )
-						return Indeterminate;
+						return Error;
 					rollInfo.groupPercentages.push_back(weight);
 				}
 				info.rolls.push_back(rollInfo);
@@ -173,7 +179,7 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 		eiASSERT( sum );
 		if( !sum )
 		{
-			return Indeterminate;
+			return Error;
 		}
 		uint64_t r = random.RandomIndex(sum);
 
@@ -191,7 +197,7 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 		eiASSERT( groupIndex >= 0 );
 		if( groupIndex < 0 || groupIndex > (int)info.groups.size() )
 		{
-			return Indeterminate;
+			return Error;
 		}
 
 		const auto& group = info.groups[groupIndex];
@@ -213,7 +219,7 @@ static AuditResult AuditBoxTx(const char* szhost, const char* sznexus, const cha
 		if( !GoatiNftRom_DecodeItem(Base16::Decode(data.rom), itemId, mintingSource, sourceData, 
 			season, timestamp, randomSeed, counter, originalOwner,
 			crateSecret, type) )
-			return Indeterminate;
+			return Error;
 		itemsMinted.push_back(itemId);
 	}
 
