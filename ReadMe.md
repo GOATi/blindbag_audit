@@ -39,7 +39,7 @@ An example "Pack" item type format from 22RS is described in terms of item group
 The above JSON data describes:
 
 - Group #0: Item ID#1, Item ID#2, Item ID#3, Item ID#4
-- Group #1: Item ID#1, Item ID#2, Item ID#3, Item ID#4
+- Group #1: Item ID#5, Item ID#6
 - Group #2: *Nothing* - no item
 - Roll #0: 
   - 60% chance of an item from Group #0
