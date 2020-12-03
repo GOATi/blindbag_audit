@@ -49,7 +49,7 @@ int main( int argc, char *argv[] )
 {
 	const char* txHash = "";
 	const char* nexus = "mainnet";
-	const char* host = "http://207.148.17.86:7071";
+	const char* host = "https://pavillionhub.com/api";
 	if( argc > 1 )
 		txHash = argv[1];
 	else
